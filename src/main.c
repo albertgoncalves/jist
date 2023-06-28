@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #define STATIC_ASSERT(condition) _Static_assert(condition, "!(" #condition ")")
@@ -25,17 +26,16 @@ typedef enum {
         _exit(ERROR);                                       \
     } while (FALSE)
 
-#define EXIT_WITH(x)                                                \
-    do {                                                            \
-        printf("%s:%s:%d `%s`\n", __FILE__, __func__, __LINE__, x); \
-        _exit(ERROR);                                               \
-    } while (FALSE)
-
-#define EXIT_IF(condition)         \
-    do {                           \
-        if (condition) {           \
-            EXIT_WITH(#condition); \
-        }                          \
+#define EXIT_IF(condition)            \
+    do {                              \
+        if (condition) {              \
+            printf("%s:%s:%d `%s`\n", \
+                   __FILE__,          \
+                   __func__,          \
+                   __LINE__,          \
+                   #condition);       \
+            _exit(ERROR);             \
+        }                             \
     } while (FALSE)
 
 typedef enum {
@@ -64,6 +64,7 @@ typedef enum {
 
 typedef union {
     const char* as_chars;
+    u32         as_u32;
     u64         as_u64;
     i64         as_i64;
 } Value;
@@ -80,6 +81,11 @@ typedef struct {
 
 STATIC_ASSERT(sizeof(void*) == sizeof(i64));
 
+typedef struct {
+    Inst* insts;
+    u32   len;
+} Block;
+
 #define CAP_STACK (1 << 3)
 static Value STACK[CAP_STACK];
 static u32   LEN_STACK = 0;
@@ -91,6 +97,14 @@ static u32      LEN_LOCALS = 0;
 #define CAP_LABELS (1 << 3)
 static KeyValue LABELS[CAP_LABELS];
 static u32      LEN_LABELS = 0;
+
+#define CAP_BLOCKS (1 << 3)
+static Block BLOCKS[CAP_BLOCKS];
+static u32   LEN_BLOCKS = 0;
+
+#define CAP_ARGS (1 << 3)
+static const char* ARGS[CAP_ARGS];
+static u32         LEN_ARGS = 0;
 
 #define INST_EMPTY(inst_type) ((Inst){.type = inst_type})
 #define INST_I64(inst_type, inst_arg) \
@@ -140,7 +154,10 @@ static Inst INSTS[] = {
 
 #define LEN_INSTS (sizeof(INSTS) / sizeof(INSTS[0]))
 
-static u32 HISTORY[LEN_INSTS] = {0};
+STATIC_ASSERT(LEN_INSTS <= 0xFFFFFFFF);
+
+static u32 JUMPS[LEN_INSTS] = {0};
+static u32 LOOPS[LEN_INSTS] = {0};
 
 static void println_inst(Inst inst) {
     switch (inst.type) {
@@ -170,12 +187,12 @@ static void println_inst(Inst inst) {
     }
     case INST_JMP: {
         printf("        jmp         %s\n",
-               INSTS[inst.value.as_u64 - 1].value.as_chars);
+               INSTS[inst.value.as_u64].value.as_chars);
         break;
     }
     case INST_JZ: {
         printf("        jz          %s\n",
-               INSTS[inst.value.as_u64 - 1].value.as_chars);
+               INSTS[inst.value.as_u64].value.as_chars);
         break;
     }
     case INST_LT: {
@@ -276,9 +293,41 @@ static KeyValue* find_label(const char* key) {
     }
 }
 
-static void run(void) {
+static Block* alloc_block(void) {
+    EXIT_IF(CAP_BLOCKS <= LEN_BLOCKS);
+    return &BLOCKS[LEN_BLOCKS++];
+}
+
+static void push_arg(const char* arg) {
+    for (u32 j = 0; j < LEN_ARGS; ++j) {
+        if (eq(arg, ARGS[j])) {
+            return;
+        }
+    }
+    EXIT_IF(CAP_ARGS <= LEN_ARGS);
+    ARGS[LEN_ARGS++] = arg;
+}
+
+static void setup(void) {
     for (u32 i = 0; i < LEN_INSTS;) {
-        const Inst inst = INSTS[i++];
+        Block* block = alloc_block();
+        block->insts = &INSTS[i];
+        u32 j = i + 1;
+        for (; j < LEN_INSTS; ++j) {
+            const Inst inst = INSTS[j];
+            if (inst.type == INST_LABEL) {
+                break;
+            }
+            if ((inst.type == INST_JMP) || (inst.type == INST_JZ)) {
+                ++j;
+                break;
+            }
+        }
+        block->len = j - i;
+        i = j;
+    }
+    for (u32 i = 0; i < LEN_INSTS; ++i) {
+        const Inst inst = INSTS[i];
         if (inst.type == INST_LABEL) {
             push_label(inst.value.as_chars, (Value){.as_u64 = i});
         }
@@ -289,8 +338,10 @@ static void run(void) {
             INSTS[i].value = find_label(inst.value.as_chars)->value;
         }
     }
+}
 
-    u64 i = 0;
+static void run(void) {
+    u32 i = 0;
     for (;;) {
         const Inst inst = INSTS[i];
 
@@ -325,14 +376,28 @@ static void run(void) {
             break;
         }
         case INST_JMP: {
-            i = inst.value.as_u64;
-            ++HISTORY[i];
+            ++JUMPS[inst.value.as_u64];
+            if (inst.value.as_u64 < i) {
+                if (LOOPS[inst.value.as_u64] == 0) {
+                    LOOPS[inst.value.as_u64] = i;
+                } else {
+                    EXIT_IF(LOOPS[inst.value.as_u64] != i);
+                }
+            }
+            i = inst.value.as_u32;
             break;
         }
         case INST_JZ: {
             if (pop_stack().as_u64 == 0) {
-                i = inst.value.as_u64;
-                ++HISTORY[i];
+                ++JUMPS[inst.value.as_u64];
+                if (inst.value.as_u64 < i) {
+                    if (LOOPS[inst.value.as_u64] == 0) {
+                        LOOPS[inst.value.as_u64] = i;
+                    } else {
+                        EXIT_IF(LOOPS[inst.value.as_u64] != i);
+                    }
+                }
+                i = inst.value.as_u32;
             } else {
                 ++i;
             }
@@ -428,6 +493,43 @@ static void run(void) {
         halt                []
 */
 
+static void show(void) {
+    u32 l = 0;
+    for (u32 i = 0; i < LEN_BLOCKS; ++i) {
+        const Block block = BLOCKS[i];
+        putchar('\n');
+        u32 j = 0;
+        for (; j < block.len; ++j, ++l) {
+            printf("%3u - ", l);
+            if (JUMPS[l] != 0) {
+                printf("%4u --+", JUMPS[l]);
+            } else {
+                printf("       |");
+            }
+            println_inst(block.insts[j]);
+        }
+    }
+    putchar('\n');
+}
+
+static void trace(u32 start, u32 end) {
+    LEN_ARGS = 0;
+
+    printf("%u -> %u:\n", start, end);
+    for (u32 i = start; i <= end; ++i) {
+        const Inst inst = INSTS[i];
+        if ((inst.type == INST_LOAD) || (inst.type == INST_STORE)) {
+            push_arg(inst.value.as_chars);
+        }
+        println_inst(inst);
+    }
+    printf("        [ ret ]\n\n");
+
+    for (u32 i = 0; i < LEN_ARGS; ++i) {
+        printf("%s\n", ARGS[i]);
+    }
+}
+
 // NOTE: See `https://www.cs.cmu.edu/~rjsimmon/15411-f15/lec/10-ssa.pdf`.
 // NOTE: See `http://troubles.md/wasm-is-not-a-stack-machine/`.
 
@@ -449,27 +551,14 @@ i32 main(void) {
            sizeof(LOCALS),
            sizeof(LABELS));
 
+    setup();
     run();
+    show();
 
-    putchar('\n');
     for (u32 i = 0; i < LEN_INSTS; ++i) {
-        if (INSTS[i].type == INST_LABEL) {
-            putchar('\n');
-        } else if ((i != 0) && ((INSTS[i - 1].type == INST_JMP) ||
-                                (INSTS[i - 1].type == INST_JZ)))
-        {
-            putchar('\n');
+        if (LOOPS[i] != 0) {
+            trace(i, LOOPS[i] + 1);
         }
-
-        if (INSTS[i].type == INST_LABEL) {
-            printf("        ");
-        } else if (HISTORY[i] == 0) {
-            printf("       |");
-        } else {
-            printf("%4u --+", HISTORY[i]);
-        }
-
-        println_inst(INSTS[i]);
     }
 
     return OK;
