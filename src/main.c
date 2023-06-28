@@ -4,6 +4,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+// NOTE: See `https://www.cs.cmu.edu/~rjsimmon/15411-f15/lec/10-ssa.pdf`.
+// NOTE: See `http://troubles.md/wasm-is-not-a-stack-machine/`.
+
 #define STATIC_ASSERT(condition) _Static_assert(condition, "!(" #condition ")")
 
 typedef uint32_t u32;
@@ -37,6 +40,8 @@ typedef enum {
             _exit(ERROR);             \
         }                             \
     } while (FALSE)
+
+STATIC_ASSERT(sizeof(void*) == sizeof(i64));
 
 typedef enum {
     INST_HALT = 0,
@@ -78,8 +83,6 @@ typedef struct {
     const char* key;
     Value       value;
 } KeyValue;
-
-STATIC_ASSERT(sizeof(void*) == sizeof(i64));
 
 typedef struct {
     Inst* insts;
@@ -443,6 +446,74 @@ static void run(void) {
     }
 }
 
+static void show(void) {
+    u32 l = 0;
+    for (u32 i = 0; i < LEN_BLOCKS; ++i) {
+        const Block block = BLOCKS[i];
+        putchar('\n');
+        u32 j = 0;
+        for (; j < block.len; ++j, ++l) {
+            printf("%3u - ", l);
+            if (JUMPS[l] != 0) {
+                printf("%4u --+", JUMPS[l]);
+            } else {
+                printf("       |");
+            }
+            println_inst(block.insts[j]);
+        }
+    }
+    putchar('\n');
+}
+
+static void trace(u32 start, u32 end) {
+    LEN_ARGS = 0;
+
+    printf("%u -> %u:\n", start, end);
+    for (u32 i = start; i <= end; ++i) {
+        const Inst inst = INSTS[i];
+        if ((inst.type == INST_LOAD) || (inst.type == INST_STORE)) {
+            push_arg(inst.value.as_chars);
+        }
+        println_inst(inst);
+    }
+    printf("        [ ret ]\n\n");
+
+    for (u32 i = 0; i < LEN_ARGS; ++i) {
+        printf("%s\n", ARGS[i]);
+    }
+}
+
+i32 main(void) {
+    printf("\n"
+           "sizeof(Bool)     : %zu\n"
+           "sizeof(Value)    : %zu\n"
+           "sizeof(KeyValue) : %zu\n"
+           "sizeof(Inst)     : %zu\n"
+           "sizeof(STACK)    : %zu\n"
+           "sizeof(LOCALS)   : %zu\n"
+           "sizeof(LABELS)   : %zu\n"
+           "\n",
+           sizeof(Bool),
+           sizeof(Value),
+           sizeof(KeyValue),
+           sizeof(Inst),
+           sizeof(STACK),
+           sizeof(LOCALS),
+           sizeof(LABELS));
+
+    setup();
+    run();
+    show();
+
+    for (u32 i = 0; i < LEN_INSTS; ++i) {
+        if (LOOPS[i] != 0) {
+            trace(i, LOOPS[i] + 1);
+        }
+    }
+
+    return OK;
+}
+
 /*
     i32 x = 0;
     while (x < 1000) {
@@ -492,74 +563,35 @@ static void run(void) {
 
         halt                []
 */
+/*
+    while_start:
+        load        x               [x]
+        push        1000            [x, 1000]
+        lt                          [lt(x, 1000)]
+        jz          while_end       [jz(while_end, lt(x, 1000))]
 
-static void show(void) {
-    u32 l = 0;
-    for (u32 i = 0; i < LEN_BLOCKS; ++i) {
-        const Block block = BLOCKS[i];
-        putchar('\n');
-        u32 j = 0;
-        for (; j < block.len; ++j, ++l) {
-            printf("%3u - ", l);
-            if (JUMPS[l] != 0) {
-                printf("%4u --+", JUMPS[l]);
-            } else {
-                printf("       |");
-            }
-            println_inst(block.insts[j]);
-        }
-    }
-    putchar('\n');
-}
+        load        x               [x]
+        push        1               [x, 1]
+        and                         [&(x, 1)]
+        push        0               [&(x, 1), 0]
+        eq                          [==(&(x, 1), 0)]
+        jz          if_else         [jz(if_else, ==(&(x, 1), 0))]
 
-static void trace(u32 start, u32 end) {
-    LEN_ARGS = 0;
+        load        x               [x]
+        push        29              [x, 29]
+        add                         [+(x, 29)]
+        store       x               [=(x, +(x, 29))]
+        jmp         if_end          [=(x, +(x, 29)), jmp(if_end)]
 
-    printf("%u -> %u:\n", start, end);
-    for (u32 i = start; i <= end; ++i) {
-        const Inst inst = INSTS[i];
-        if ((inst.type == INST_LOAD) || (inst.type == INST_STORE)) {
-            push_arg(inst.value.as_chars);
-        }
-        println_inst(inst);
-    }
-    printf("        [ ret ]\n\n");
+    if_else:
+        load        x               [x]
+        push        -3              [x, -3]
+        add                         [+(x, -3)]
+        store       x               [=(x, +(x, -3))]
 
-    for (u32 i = 0; i < LEN_ARGS; ++i) {
-        printf("%s\n", ARGS[i]);
-    }
-}
+    if_end:
+        jmp         while_start     [jmp(while_start)]
 
-// NOTE: See `https://www.cs.cmu.edu/~rjsimmon/15411-f15/lec/10-ssa.pdf`.
-// NOTE: See `http://troubles.md/wasm-is-not-a-stack-machine/`.
-
-i32 main(void) {
-    printf("\n"
-           "sizeof(Bool)     : %zu\n"
-           "sizeof(Value)    : %zu\n"
-           "sizeof(KeyValue) : %zu\n"
-           "sizeof(Inst)     : %zu\n"
-           "sizeof(STACK)    : %zu\n"
-           "sizeof(LOCALS)   : %zu\n"
-           "sizeof(LABELS)   : %zu\n"
-           "\n",
-           sizeof(Bool),
-           sizeof(Value),
-           sizeof(KeyValue),
-           sizeof(Inst),
-           sizeof(STACK),
-           sizeof(LOCALS),
-           sizeof(LABELS));
-
-    setup();
-    run();
-    show();
-
-    for (u32 i = 0; i < LEN_INSTS; ++i) {
-        if (LOOPS[i] != 0) {
-            trace(i, LOOPS[i] + 1);
-        }
-    }
-
-    return OK;
-}
+    while_end:
+        [ ret ]
+*/
