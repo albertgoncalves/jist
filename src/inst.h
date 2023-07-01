@@ -177,11 +177,11 @@ static void inst_println(Inst inst) {
         break;
     }
     case INST_JMP: {
-        printf("        jmp         %lu\n", inst.value.as_u64);
+        printf("        jmp         %u\n", inst.value.as_u32);
         break;
     }
     case INST_JZ: {
-        printf("        jz          %lu\n", inst.value.as_u64);
+        printf("        jz          %u\n", inst.value.as_u32);
         break;
     }
     case INST_LT: {
@@ -231,7 +231,7 @@ static void insts_setup(Inst* insts, u32 len_insts) {
     for (u32 i = 0; i < len_insts; ++i) {
         const Inst inst = insts[i];
         if (inst.type == INST_LABEL) {
-            label_push(inst.value.as_chars, (InstValue){.as_u64 = i});
+            label_push(inst.value.as_chars, (InstValue){.as_u32 = i});
         }
     }
     for (u32 i = 0; i < len_insts; ++i) {
@@ -277,12 +277,12 @@ static void insts_run(const Inst* insts) {
             break;
         }
         case INST_JMP: {
-            ++JUMPS[inst.value.as_u64];
-            if (inst.value.as_u64 < i) {
-                if (LOOPS[inst.value.as_u64] == 0) {
-                    LOOPS[inst.value.as_u64] = i;
+            ++JUMPS[inst.value.as_u32];
+            if (inst.value.as_u32 < i) {
+                if (LOOPS[inst.value.as_u32] == 0) {
+                    LOOPS[inst.value.as_u32] = i;
                 } else {
-                    EXIT_IF(LOOPS[inst.value.as_u64] != i);
+                    EXIT_IF(LOOPS[inst.value.as_u32] != i);
                 }
             }
             i = inst.value.as_u32;
@@ -290,12 +290,12 @@ static void insts_run(const Inst* insts) {
         }
         case INST_JZ: {
             if (stack_pop().as_u64 == 0) {
-                ++JUMPS[inst.value.as_u64];
-                if (inst.value.as_u64 < i) {
-                    if (LOOPS[inst.value.as_u64] == 0) {
-                        LOOPS[inst.value.as_u64] = i;
+                ++JUMPS[inst.value.as_u32];
+                if (inst.value.as_u32 < i) {
+                    if (LOOPS[inst.value.as_u32] == 0) {
+                        LOOPS[inst.value.as_u32] = i;
                     } else {
-                        EXIT_IF(LOOPS[inst.value.as_u64] != i);
+                        EXIT_IF(LOOPS[inst.value.as_u32] != i);
                     }
                 }
                 i = inst.value.as_u32;
@@ -348,7 +348,7 @@ static void insts_trace(const Inst* insts, u32 start, u32 end) {
     LEN_ARGS = 0;
 
     printf("%u -> %u:\n", start, end);
-    for (u32 i = start; i <= end; ++i) {
+    for (u32 i = start; i < end; ++i) {
         const Inst inst = insts[i];
         if ((inst.type == INST_LOAD) || (inst.type == INST_STORE)) {
             arg_push(inst.value.as_chars);
@@ -382,7 +382,10 @@ static void insts_show(const Inst* insts, u32 len_insts) {
     putchar('\n');
     for (u32 i = 0; i < len_insts; ++i) {
         if (LOOPS[i] != 0) {
-            insts_trace(insts, i, LOOPS[i] + 1);
+            const u32 start = i;
+            const u32 end = LOOPS[i] + 2;
+            EXIT_IF(len_insts < end);
+            insts_trace(insts, start, end);
         }
     }
 }
