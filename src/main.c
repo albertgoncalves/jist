@@ -1,4 +1,4 @@
-#include "inst.h"
+#include "expr.h"
 
 // NOTE: See `https://www.cs.cmu.edu/~rjsimmon/15411-f15/lec/10-ssa.pdf`.
 // NOTE: See `http://troubles.md/wasm-is-not-a-stack-machine/`.
@@ -49,25 +49,30 @@ STATIC_ASSERT(LEN_INSTS <= CAP_INSTS);
 
 i32 main(void) {
     printf("\n"
-           "sizeof(Bool)     : %zu\n"
-           "sizeof(Value)    : %zu\n"
-           "sizeof(KeyValue) : %zu\n"
-           "sizeof(Inst)     : %zu\n"
-           "sizeof(STACK)    : %zu\n"
-           "sizeof(LOCALS)   : %zu\n"
-           "sizeof(LABELS)   : %zu\n"
+           "sizeof(Bool)      : %zu\n"
+           "sizeof(InstValue) : %zu\n"
+           "sizeof(KeyValue)  : %zu\n"
+           "sizeof(Inst)      : %zu\n"
+           "sizeof(STACK)     : %zu\n"
+           "sizeof(LOCALS)    : %zu\n"
+           "sizeof(LABELS)    : %zu\n"
+           "sizeof(Expr)      : %zu\n"
            "\n",
            sizeof(Bool),
-           sizeof(Value),
+           sizeof(InstValue),
            sizeof(KeyValue),
            sizeof(Inst),
            sizeof(STACK),
            sizeof(LOCALS),
-           sizeof(LABELS));
+           sizeof(LABELS),
+           sizeof(Expr));
 
     insts_setup(INSTS, LEN_INSTS);
     insts_run(INSTS);
     insts_show(INSTS, LEN_INSTS);
+
+    exprs_parse(INSTS, 2, 26);
+    exprs_show();
 
     return OK;
 }
