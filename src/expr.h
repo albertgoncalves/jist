@@ -29,12 +29,12 @@ typedef struct Expr Expr;
 
 typedef union {
     const char* as_chars;
-    Expr*       as_exprs[2];
+    Expr*       as_expr;
     i64         as_i64;
 } ExprValue;
 
 struct Expr {
-    ExprValue value;
+    ExprValue values[2];
     ExprType  type;
 };
 
@@ -59,11 +59,11 @@ static void list_push(Expr* expr) {
 static void expr_print(Expr expr) {
     switch (expr.type) {
     case EXPR_IDENT: {
-        printf("%s", expr.value.as_chars);
+        printf("%s", expr.values[0].as_chars);
         break;
     }
     case EXPR_I64: {
-        printf("%ld", expr.value.as_i64);
+        printf("%ld", expr.values[0].as_i64);
         break;
     }
     case EXPR_RET: {
@@ -71,64 +71,58 @@ static void expr_print(Expr expr) {
         break;
     }
     case EXPR_LABEL: {
-        printf("label(%s)", expr.value.as_chars);
+        printf("label(%s)", expr.values[0].as_chars);
         break;
     }
     case EXPR_LOAD: {
-        printf("load(%s)", expr.value.as_chars);
+        printf("load(%s)", expr.values[0].as_chars);
         break;
     }
     case EXPR_STORE: {
-        printf("store(");
-        expr_print(*expr.value.as_exprs[0]);
-        printf(", ");
-        expr_print(*expr.value.as_exprs[1]);
+        printf("store(%s, ", expr.values[0].as_chars);
+        expr_print(*expr.values[1].as_expr);
         putchar(')');
         break;
     }
     case EXPR_JMP: {
-        printf("jmp(");
-        expr_print(*expr.value.as_exprs[0]);
-        putchar(')');
+        printf("jmp(%s)", expr.values[0].as_chars);
         break;
     }
     case EXPR_JZ: {
-        printf("jz(");
-        expr_print(*expr.value.as_exprs[0]);
-        printf(", ");
-        expr_print(*expr.value.as_exprs[1]);
+        printf("jz(%s, ", expr.values[0].as_chars);
+        expr_print(*expr.values[1].as_expr);
         putchar(')');
         break;
     }
     case EXPR_LT: {
         printf("lt(");
-        expr_print(*expr.value.as_exprs[0]);
+        expr_print(*expr.values[0].as_expr);
         printf(", ");
-        expr_print(*expr.value.as_exprs[1]);
+        expr_print(*expr.values[1].as_expr);
         putchar(')');
         break;
     }
     case EXPR_EQ: {
         printf("eq(");
-        expr_print(*expr.value.as_exprs[0]);
+        expr_print(*expr.values[0].as_expr);
         printf(", ");
-        expr_print(*expr.value.as_exprs[1]);
+        expr_print(*expr.values[1].as_expr);
         putchar(')');
         break;
     }
     case EXPR_AND: {
         printf("and(");
-        expr_print(*expr.value.as_exprs[0]);
+        expr_print(*expr.values[0].as_expr);
         printf(", ");
-        expr_print(*expr.value.as_exprs[1]);
+        expr_print(*expr.values[1].as_expr);
         putchar(')');
         break;
     }
     case EXPR_ADD: {
         printf("add(");
-        expr_print(*expr.value.as_exprs[0]);
+        expr_print(*expr.values[0].as_expr);
         printf(", ");
-        expr_print(*expr.value.as_exprs[1]);
+        expr_print(*expr.values[1].as_expr);
         putchar(')');
         break;
     }
@@ -147,7 +141,7 @@ static Expr* insts_to_expr(Inst* insts, u32* i, u32 end) {
     }
     case INST_LABEL: {
         Expr* expr = expr_alloc();
-        expr->value.as_chars = inst.value.as_chars;
+        expr->values[0].as_chars = inst.value.as_chars;
         expr->type = EXPR_LABEL;
         return expr;
     }
@@ -156,76 +150,61 @@ static Expr* insts_to_expr(Inst* insts, u32* i, u32 end) {
     }
     case INST_LOAD: {
         Expr* expr = expr_alloc();
-        expr->value.as_chars = inst.value.as_chars;
+        expr->values[0].as_chars = inst.value.as_chars;
         expr->type = EXPR_LOAD;
         return expr;
     }
     case INST_STORE: {
-        Expr* arg = expr_alloc();
-        arg->value.as_chars = inst.value.as_chars;
-        arg->type = EXPR_IDENT;
-
-        Expr* func = expr_alloc();
-        func->value.as_exprs[1] = insts_to_expr(insts, i, end);
-        func->value.as_exprs[0] = arg;
-        func->type = EXPR_STORE;
-
-        return func;
+        Expr* expr = expr_alloc();
+        expr->values[0].as_chars = inst.value.as_chars;
+        expr->values[1].as_expr = insts_to_expr(insts, i, end);
+        expr->type = EXPR_STORE;
+        return expr;
     }
     case INST_PUSH: {
         Expr* expr = expr_alloc();
-        expr->value.as_i64 = inst.value.as_i64;
+        expr->values[0].as_i64 = inst.value.as_i64;
         expr->type = EXPR_I64;
         return expr;
     }
     case INST_JMP: {
-        Expr* arg = expr_alloc();
-        arg->value.as_chars = insts[inst.value.as_u32].value.as_chars;
-        arg->type = EXPR_IDENT;
-
-        Expr* func = expr_alloc();
-        func->value.as_exprs[0] = arg;
-        func->type = EXPR_JMP;
-
-        return func;
+        Expr* expr = expr_alloc();
+        expr->values[0].as_chars = insts[inst.value.as_u32].value.as_chars;
+        expr->type = EXPR_JMP;
+        return expr;
     }
     case INST_JZ: {
-        Expr* arg = expr_alloc();
-        arg->value.as_chars = insts[inst.value.as_u32].value.as_chars;
-        arg->type = EXPR_IDENT;
-
-        Expr* func = expr_alloc();
-        func->value.as_exprs[0] = arg;
-        func->value.as_exprs[1] = insts_to_expr(insts, i, end);
-        func->type = EXPR_JZ;
-
-        return func;
+        Expr* expr = expr_alloc();
+        expr->values[0].as_chars = insts[inst.value.as_u32].value.as_chars;
+        expr->values[1].as_expr = insts_to_expr(insts, i, end);
+        expr->type = EXPR_JZ;
+        return expr;
     }
     case INST_LT: {
         Expr* expr = expr_alloc();
-        expr->value.as_exprs[1] = insts_to_expr(insts, i, end);
-        expr->value.as_exprs[0] = insts_to_expr(insts, i, end);
+        expr->values[1].as_expr = insts_to_expr(insts, i, end);
+        expr->values[0].as_expr = insts_to_expr(insts, i, end);
         expr->type = EXPR_LT;
         return expr;
     }
     case INST_EQ: {
         Expr* expr = expr_alloc();
-        expr->value.as_exprs[1] = insts_to_expr(insts, i, end);
-        expr->value.as_exprs[0] = insts_to_expr(insts, i, end);
+        expr->values[1].as_expr = insts_to_expr(insts, i, end);
+        expr->values[0].as_expr = insts_to_expr(insts, i, end);
         expr->type = EXPR_EQ;
         return expr;
     }
     case INST_AND: {
         Expr* expr = expr_alloc();
-        expr->value.as_exprs[1] = insts_to_expr(insts, i, end);
-        expr->value.as_exprs[0] = insts_to_expr(insts, i, end);
+        expr->values[1].as_expr = insts_to_expr(insts, i, end);
+        expr->values[0].as_expr = insts_to_expr(insts, i, end);
         expr->type = EXPR_AND;
         return expr;
     }
     case INST_ADD: {
         Expr* expr = expr_alloc();
-        expr->value.as_exprs[1] = insts_to_expr(insts, i, end);
-        expr->value.as_exprs[0] = insts_to_expr(insts, i, end);
+        expr->values[1].as_expr = insts_to_expr(insts, i, end);
+        expr->values[0].as_expr = insts_to_expr(insts, i, end);
         expr->type = EXPR_ADD;
         return expr;
     }
@@ -248,18 +227,14 @@ static void exprs_parse(Inst* insts, u32 start, u32 end) {
         list_push(expr);
     }
 
-    u32 i = end;
-    while (start < i) {
+    for (u32 i = end; start < i;) {
         list_push(insts_to_expr(insts, &i, start));
     }
 }
 
 static void exprs_show(void) {
     putchar('\n');
-    for (u32 i = LEN_LIST;;) {
-        if (i == 0) {
-            break;
-        }
+    for (u32 i = LEN_LIST; i != 0;) {
         expr_print(*LIST[--i]);
         putchar('\n');
     }
