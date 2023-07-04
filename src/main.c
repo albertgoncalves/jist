@@ -1,4 +1,4 @@
-#include "expr.h"
+#include "asm.h"
 
 // NOTE: See `https://www.cs.cmu.edu/~rjsimmon/15411-f15/lec/10-ssa.pdf`.
 // NOTE: See `http://troubles.md/wasm-is-not-a-stack-machine/`.
@@ -53,19 +53,21 @@ i32 main(void) {
            "sizeof(InstValue) : %zu\n"
            "sizeof(KeyValue)  : %zu\n"
            "sizeof(Inst)      : %zu\n"
-           "sizeof(STACK)     : %zu\n"
-           "sizeof(LOCALS)    : %zu\n"
-           "sizeof(LABELS)    : %zu\n"
            "sizeof(Expr)      : %zu\n"
+           "sizeof(Local)     : %zu\n"
+           "sizeof(Pointer)   : %zu\n"
+           "sizeof(AsmArg)    : %zu\n"
+           "sizeof(Asm)       : %zu\n"
            "\n",
            sizeof(Bool),
            sizeof(InstValue),
            sizeof(KeyValue),
            sizeof(Inst),
-           sizeof(STACK),
-           sizeof(LOCALS),
-           sizeof(LABELS),
-           sizeof(Expr));
+           sizeof(Expr),
+           sizeof(Local),
+           sizeof(Pointer),
+           sizeof(AsmArg),
+           sizeof(Asm));
 
     insts_setup(INSTS, LEN_INSTS);
     insts_run(INSTS);
@@ -73,6 +75,8 @@ i32 main(void) {
 
     exprs_parse(INSTS, 2, 26);
     exprs_show();
+
+    asm_emit();
 
     return OK;
 }

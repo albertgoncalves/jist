@@ -67,9 +67,9 @@ static u32      LEN_LABELS = 0;
 static Block BLOCKS[CAP_BLOCKS];
 static u32   LEN_BLOCKS = 0;
 
-#define CAP_ARGS (1 << 3)
-static const char* ARGS[CAP_ARGS];
-static u32         LEN_ARGS = 0;
+#define CAP_ESCAPES (1 << 3)
+static const char* ESCAPES[CAP_ESCAPES];
+static u32         LEN_ESCAPES = 0;
 
 #define CAP_INSTS (1 << 5)
 STATIC_ASSERT(CAP_INSTS <= 0xFFFFFFFF);
@@ -140,14 +140,14 @@ static Block* block_alloc(void) {
     return &BLOCKS[LEN_BLOCKS++];
 }
 
-static void arg_push(const char* arg) {
-    for (u32 j = 0; j < LEN_ARGS; ++j) {
-        if (eq(arg, ARGS[j])) {
+static void escape_push(const char* escape) {
+    for (u32 j = 0; j < LEN_ESCAPES; ++j) {
+        if (eq(escape, ESCAPES[j])) {
             return;
         }
     }
-    EXIT_IF(CAP_ARGS <= LEN_ARGS);
-    ARGS[LEN_ARGS++] = arg;
+    EXIT_IF(CAP_ESCAPES <= LEN_ESCAPES);
+    ESCAPES[LEN_ESCAPES++] = escape;
 }
 
 static void inst_println(Inst inst) {
@@ -345,20 +345,20 @@ static void insts_run(const Inst* insts) {
 }
 
 static void insts_trace(const Inst* insts, u32 start, u32 end) {
-    LEN_ARGS = 0;
+    LEN_ESCAPES = 0;
 
     printf("%u -> %u:\n", start, end);
     for (u32 i = start; i < end; ++i) {
         const Inst inst = insts[i];
         if ((inst.type == INST_LOAD) || (inst.type == INST_STORE)) {
-            arg_push(inst.value.as_chars);
+            escape_push(inst.value.as_chars);
         }
         inst_println(inst);
     }
     printf("        [ ret ]\n\n");
 
-    for (u32 i = 0; i < LEN_ARGS; ++i) {
-        printf("%s\n", ARGS[i]);
+    for (u32 i = 0; i < LEN_ESCAPES; ++i) {
+        printf("%s\n", ESCAPES[i]);
     }
 }
 

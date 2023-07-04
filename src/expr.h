@@ -31,6 +31,7 @@ typedef union {
     const char* as_chars;
     Expr*       as_expr;
     i64         as_i64;
+    i32         as_i32;
 } ExprValue;
 
 struct Expr {
