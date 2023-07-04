@@ -3,6 +3,9 @@
 
 #include "expr.h"
 
+#include <string.h>
+#include <sys/mman.h>
+
 typedef enum {
     ASM_REG_RDI = 0,
     ASM_REG_R8,
@@ -22,10 +25,10 @@ typedef union {
 
 typedef enum {
     ASM_ARG_NONE = 0,
-    ASM_ARG_LABEL,
-    ASM_ARG_REG,
-    ASM_ARG_ADDR,
-    ASM_ARG_I32,
+    ASM_ARG_LABEL = 1 << 0,
+    ASM_ARG_REG = 1 << 1,
+    ASM_ARG_ADDR = 1 << 2,
+    ASM_ARG_I32 = 1 << 3,
 } AsmArgType;
 
 typedef struct {
@@ -69,9 +72,31 @@ typedef struct {
     AsmArgReg   reg;
 } Pointer;
 
+typedef struct {
+    const char* label;
+    u8*         bytes;
+} Label;
+
+typedef struct {
+    const char* label;
+    u8*         bytes;
+} Patch;
+
 #define CAP_ASMS (1 << 5)
 static Asm ASMS[CAP_ASMS];
 static u32 LEN_ASMS = 0;
+
+#define CAP_BYTES (1 << 6)
+static u8  BYTES[CAP_BYTES];
+static u32 LEN_BYTES = 0;
+
+#define CAP_ASM_LABELS (1 << 4)
+static Label ASM_LABELS[CAP_ASM_LABELS];
+static u32   LEN_ASM_LABELS = 0;
+
+#define CAP_PATCHES (1 << 4)
+static Patch PATCHES[CAP_PATCHES];
+static u32   LEN_PATCHES = 0;
 
 static AsmArgReg REGS[] = {
     ASM_REG_RDI,
@@ -99,6 +124,30 @@ static AsmArgReg reg_alloc(void) {
 static Pointer* ptr_alloc(void) {
     EXIT_IF(CAP_PTRS <= LEN_PTRS);
     return &PTRS[LEN_PTRS++];
+}
+
+static void byte_push(u8 byte) {
+    EXIT_IF(CAP_BYTES <= LEN_BYTES);
+    BYTES[LEN_BYTES++] = byte;
+}
+
+static void asm_label_push(const char* label) {
+    EXIT_IF(CAP_ASM_LABELS <= LEN_ASM_LABELS);
+    for (u32 i = 0; i < LEN_ASM_LABELS; ++i) {
+        EXIT_IF(eq(ASM_LABELS[i].label, label));
+    }
+    ASM_LABELS[LEN_ASM_LABELS++] = (Label){
+        .label = label,
+        .bytes = &BYTES[LEN_BYTES],
+    };
+}
+
+static void patch_push(const char* label) {
+    EXIT_IF(CAP_PATCHES <= LEN_PATCHES);
+    PATCHES[LEN_PATCHES++] = (Patch){
+        .label = label,
+        .bytes = &BYTES[LEN_BYTES],
+    };
 }
 
 static void asm_arg_reg_print(AsmArgReg reg) {
@@ -410,10 +459,128 @@ static void expr_to_asm(Expr* expr) {
     }
 }
 
+static void asm_to_bytes(Asm* asm) {
+    switch (asm->type) {
+    case ASM_NOP: {
+        EXIT();
+    }
+    case ASM_RET: {
+        byte_push(0xC3);
+        break;
+    }
+    case ASM_LABEL: {
+        asm_label_push(asm->args[0].value.as_chars);
+        break;
+    }
+    case ASM_MOV: {
+        const AsmArg arg0 = asm->args[0];
+        const AsmArg arg1 = asm->args[1];
+        if (((arg0.type == ASM_ARG_REG) && (arg1.type == ASM_ARG_ADDR)) &&
+            (arg0.value.as_reg == ASM_REG_R8) &&
+            (arg1.value.as_addr.reg == ASM_REG_RDI) &&
+            (arg1.value.as_addr.offset == 0))
+        {
+            byte_push(0x4C);
+            byte_push(0x8B);
+            byte_push(0x07);
+            break;
+        }
+        EXIT();
+    }
+    case ASM_JMP: {
+        byte_push(0xE9);
+        LEN_BYTES += sizeof(i32);
+        patch_push(asm->args[0].value.as_chars);
+        break;
+    }
+    case ASM_JNZ: {
+        byte_push(0x0F);
+        byte_push(0x85);
+        LEN_BYTES += sizeof(i32);
+        patch_push(asm->args[0].value.as_chars);
+        break;
+    }
+    case ASM_JGE: {
+        byte_push(0x0F);
+        byte_push(0x8D);
+        LEN_BYTES += sizeof(i32);
+        patch_push(asm->args[0].value.as_chars);
+        break;
+    }
+    case ASM_TEST: {
+        const AsmArg arg0 = asm->args[0];
+        const AsmArg arg1 = asm->args[1];
+        if (((arg0.type & arg1.type) == ASM_ARG_REG) &&
+            (arg0.value.as_reg == ASM_REG_R8) &&
+            (arg1.value.as_reg == ASM_REG_R8))
+        {
+            byte_push(0x4D);
+            byte_push(0x85);
+            byte_push(0xC0);
+            break;
+        }
+        EXIT();
+    }
+    case ASM_CMP: {
+        const AsmArg arg0 = asm->args[0];
+        const AsmArg arg1 = asm->args[1];
+        if (((arg0.type == ASM_ARG_ADDR) && (arg1.type == ASM_ARG_I32)) &&
+            (arg0.value.as_addr.reg == ASM_REG_RDI) &&
+            arg0.value.as_addr.offset == 0)
+        {
+            byte_push(0x48);
+            byte_push(0x81);
+            byte_push(0x3F);
+            memcpy(&BYTES[LEN_BYTES], &arg1.value.as_i32, sizeof(i32));
+            LEN_BYTES += sizeof(i32);
+            break;
+        }
+        EXIT();
+    }
+    case ASM_AND: {
+        const AsmArg arg0 = asm->args[0];
+        const AsmArg arg1 = asm->args[1];
+        if (((arg0.type == ASM_ARG_REG) && (arg1.type == ASM_ARG_I32)) &&
+            (arg0.value.as_reg == ASM_REG_R8))
+        {
+            byte_push(0x49);
+            byte_push(0x81);
+            byte_push(0xE0);
+            memcpy(&BYTES[LEN_BYTES], &arg1.value.as_i32, sizeof(i32));
+            LEN_BYTES += sizeof(i32);
+            break;
+        }
+        EXIT();
+    }
+    case ASM_ADD: {
+        const AsmArg arg0 = asm->args[0];
+        const AsmArg arg1 = asm->args[1];
+        if (((arg0.type == ASM_ARG_ADDR) && (arg1.type == ASM_ARG_I32)) &&
+            (arg0.value.as_addr.reg == ASM_REG_RDI) &&
+            (arg0.value.as_addr.offset == 0))
+        {
+            byte_push(0x48);
+            byte_push(0x81);
+            byte_push(0x07);
+            memcpy(&BYTES[LEN_BYTES], &arg1.value.as_i32, sizeof(i32));
+            LEN_BYTES += sizeof(i32);
+            break;
+        }
+        EXIT();
+    }
+    default: {
+        EXIT();
+    }
+    }
+}
+
 static void asm_emit(void) {
     LEN_ASMS = 0;
     LEN_REGS = 0;
     LEN_PTRS = 0;
+    LEN_BYTES = 0;
+    LEN_ASM_LABELS = 0;
+    LEN_PATCHES = 0;
 
     for (u32 i = 0; i < LEN_ESCAPES; ++i) {
         Pointer* pointer = ptr_alloc();
@@ -426,6 +593,38 @@ static void asm_emit(void) {
         LEN_REGS = len_regs;
         expr_to_asm(LIST[--i]);
     }
+
+    for (u32 i = 0; i < LEN_ASMS; ++i) {
+        asm_to_bytes(&ASMS[i]);
+    }
+
+    for (u32 i = 0; i < LEN_PATCHES; ++i) {
+        for (u32 j = 0; j < LEN_ASM_LABELS; ++j) {
+            if (!eq(PATCHES[i].label, ASM_LABELS[j].label)) {
+                continue;
+            }
+
+            const i64 offset = ASM_LABELS[j].bytes - PATCHES[i].bytes;
+            EXIT_IF(2147483647 < offset);
+            EXIT_IF(offset < -2147483648);
+
+            const i32 truncated = (i32)offset;
+            memcpy(PATCHES[i].bytes - sizeof(i32), &truncated, sizeof(i32));
+        }
+    }
+}
+
+static void* asm_jit(void) {
+    void* func = mmap(NULL,
+                      LEN_BYTES,
+                      PROT_READ | PROT_WRITE,
+                      MAP_ANONYMOUS | MAP_PRIVATE,
+                      -1,
+                      0);
+    EXIT_IF(func == MAP_FAILED);
+    memcpy(func, BYTES, LEN_BYTES);
+    EXIT_IF(mprotect(func, LEN_BYTES, PROT_EXEC));
+    return func;
 }
 
 static void asm_show(void) {

@@ -59,9 +59,9 @@ static u32       LEN_STACK = 0;
 static KeyValue LOCALS[CAP_LOCALS];
 static u32      LEN_LOCALS = 0;
 
-#define CAP_LABELS (1 << 3)
-static KeyValue LABELS[CAP_LABELS];
-static u32      LEN_LABELS = 0;
+#define CAP_INST_LABELS (1 << 3)
+static KeyValue INST_LABELS[CAP_INST_LABELS];
+static u32      LEN_INST_LABELS = 0;
 
 #define CAP_BLOCKS (1 << 3)
 static Block BLOCKS[CAP_BLOCKS];
@@ -110,18 +110,18 @@ static KeyValue* local_find(const char* key) {
     }
 }
 
-static void label_push(const char* key, InstValue value) {
-    EXIT_IF(CAP_LABELS <= LEN_LABELS);
-    LABELS[LEN_LABELS++] = (KeyValue){
+static void inst_label_push(const char* key, InstValue value) {
+    EXIT_IF(CAP_INST_LABELS <= LEN_INST_LABELS);
+    INST_LABELS[LEN_INST_LABELS++] = (KeyValue){
         .key = key,
         .value = value,
     };
 }
 
-static KeyValue* label_find(const char* key) {
-    EXIT_IF(LEN_LABELS == 0);
-    for (u32 i = LEN_LABELS;;) {
-        KeyValue* label = &LABELS[--i];
+static KeyValue* inst_label_find(const char* key) {
+    EXIT_IF(LEN_INST_LABELS == 0);
+    for (u32 i = LEN_INST_LABELS;;) {
+        KeyValue* label = &INST_LABELS[--i];
         if (eq(key, label->key)) {
             return label;
         }
@@ -217,13 +217,13 @@ static void insts_setup(Inst* insts, u32 len_insts) {
     for (u32 i = 0; i < len_insts; ++i) {
         const Inst inst = insts[i];
         if (inst.type == INST_LABEL) {
-            label_push(inst.value.as_chars, (InstValue){.as_u32 = i});
+            inst_label_push(inst.value.as_chars, (InstValue){.as_u32 = i});
         }
     }
     for (u32 i = 0; i < len_insts; ++i) {
         const Inst inst = insts[i];
         if ((inst.type == INST_JMP) || (inst.type == INST_JZ)) {
-            insts[i].value = label_find(inst.value.as_chars)->value;
+            insts[i].value = inst_label_find(inst.value.as_chars)->value;
         }
     }
 }

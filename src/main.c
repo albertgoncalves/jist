@@ -55,9 +55,10 @@ i32 main(void) {
            "sizeof(Inst)      : %zu\n"
            "sizeof(Expr)      : %zu\n"
            "sizeof(Local)     : %zu\n"
-           "sizeof(Pointer)   : %zu\n"
            "sizeof(AsmArg)    : %zu\n"
            "sizeof(Asm)       : %zu\n"
+           "sizeof(Pointer)   : %zu\n"
+           "sizeof(Label)     : %zu\n"
            "\n",
            sizeof(Bool),
            sizeof(InstValue),
@@ -65,9 +66,10 @@ i32 main(void) {
            sizeof(Inst),
            sizeof(Expr),
            sizeof(Local),
-           sizeof(Pointer),
            sizeof(AsmArg),
-           sizeof(Asm));
+           sizeof(Asm),
+           sizeof(Pointer),
+           sizeof(Label));
 
     insts_setup(INSTS, LEN_INSTS);
     insts_run(INSTS);
@@ -89,6 +91,12 @@ i32 main(void) {
 
         asm_emit();
         asm_show();
+
+        void* func = asm_jit();
+
+        i64 x = 0;
+        ((void (*)(i64*))func)(&x);
+        printf("%ld\n", x);
     }
 
     return OK;
