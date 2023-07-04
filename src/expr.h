@@ -43,6 +43,10 @@ struct Expr {
 static Expr EXPRS[CAP_EXPRS];
 static u32  LEN_EXPRS = 0;
 
+#define CAP_ESCAPES (1 << 3)
+static const char* ESCAPES[CAP_ESCAPES];
+static u32         LEN_ESCAPES = 0;
+
 #define CAP_LIST (1 << 4)
 static Expr* LIST[CAP_LIST];
 static u32   LEN_LIST = 0;
@@ -50,6 +54,16 @@ static u32   LEN_LIST = 0;
 static Expr* expr_alloc(void) {
     EXIT_IF(CAP_EXPRS <= LEN_EXPRS);
     return &EXPRS[LEN_EXPRS++];
+}
+
+static void escape_push(const char* escape) {
+    for (u32 j = 0; j < LEN_ESCAPES; ++j) {
+        if (eq(escape, ESCAPES[j])) {
+            return;
+        }
+    }
+    EXIT_IF(CAP_ESCAPES <= LEN_ESCAPES);
+    ESCAPES[LEN_ESCAPES++] = escape;
 }
 
 static void list_push(Expr* expr) {
@@ -150,12 +164,16 @@ static Expr* insts_to_expr(Inst* insts, u32* i, u32 end) {
         EXIT();
     }
     case INST_LOAD: {
+        escape_push(inst.value.as_chars);
+
         Expr* expr = expr_alloc();
         expr->values[0].as_chars = inst.value.as_chars;
         expr->type = EXPR_LOAD;
         return expr;
     }
     case INST_STORE: {
+        escape_push(inst.value.as_chars);
+
         Expr* expr = expr_alloc();
         expr->values[0].as_chars = inst.value.as_chars;
         expr->values[1].as_expr = insts_to_expr(insts, i, end);
@@ -221,6 +239,7 @@ static Expr* insts_to_expr(Inst* insts, u32* i, u32 end) {
 static void exprs_parse(Inst* insts, u32 start, u32 end) {
     LEN_EXPRS = 0;
     LEN_LIST = 0;
+    LEN_ESCAPES = 0;
 
     {
         Expr* expr = expr_alloc();

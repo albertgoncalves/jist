@@ -71,12 +71,25 @@ i32 main(void) {
 
     insts_setup(INSTS, LEN_INSTS);
     insts_run(INSTS);
-    insts_show(INSTS, LEN_INSTS);
+    insts_show();
 
-    exprs_parse(INSTS, 2, 26);
-    exprs_show();
+    for (u32 i = 0; i < LEN_INSTS; ++i) {
+        if (LOOPS[i] == 0) {
+            continue;
+        }
 
-    asm_emit();
+        const u32 start = i;
+        const u32 end = LOOPS[i] + 2;
+        EXIT_IF(LEN_INSTS < end);
+
+        printf("\n%u -> %u\n", start, end);
+
+        exprs_parse(INSTS, start, end);
+        exprs_show();
+
+        asm_emit();
+        asm_show();
+    }
 
     return OK;
 }

@@ -426,7 +426,9 @@ static void asm_emit(void) {
         LEN_REGS = len_regs;
         expr_to_asm(LIST[--i]);
     }
+}
 
+static void asm_show(void) {
     putchar('\n');
     for (u32 i = 0; i < LEN_ASMS; ++i) {
         asm_println(&ASMS[i]);
