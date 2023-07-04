@@ -304,13 +304,13 @@ static void expr_to_asm(Expr* expr) {
         EXIT();
     }
     case EXPR_STORE: {
-        const char* var = expr->values[0].as_chars;
+        const char* label = expr->values[0].as_chars;
         const Expr* child = expr->values[1].as_expr;
 
         if (child->type == EXPR_ADD) {
             const Expr* grandchild = child->values[0].as_expr;
             if ((grandchild->type == EXPR_LOAD) &&
-                eq(var, grandchild->values[0].as_chars))
+                eq(label, grandchild->values[0].as_chars))
             {
                 Asm* asm = asm_alloc();
                 expr_to_asm_arg(child->values[0].as_expr, &asm->args[0]);
