@@ -8,6 +8,13 @@ fi
 
 flags=(
     "-ferror-limit=1"
+    "-fsanitize=address"
+    "-fsanitize=bounds"
+    "-fsanitize=float-divide-by-zero"
+    "-fsanitize=implicit-conversion"
+    "-fsanitize=integer"
+    "-fsanitize=nullability"
+    "-fsanitize=undefined"
     -fshort-enums
     "-march=native"
     -O3
