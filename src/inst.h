@@ -41,16 +41,6 @@ typedef struct {
     InstType  type;
 } Inst;
 
-typedef struct {
-    const char* key;
-    InstValue   value;
-} KeyValue;
-
-typedef struct {
-    Inst* insts;
-    u32   len;
-} Block;
-
 void insts_setup(Inst*, u32);
 void insts_run(const Inst*);
 void insts_show(void);

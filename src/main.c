@@ -61,29 +61,6 @@ static Inst INSTS[] = {
 #define LEN_INSTS (sizeof(INSTS) / sizeof(INSTS[0]))
 
 i32 main(void) {
-    printf("\n"
-           "sizeof(Bool)      : %zu\n"
-           "sizeof(InstValue) : %zu\n"
-           "sizeof(KeyValue)  : %zu\n"
-           "sizeof(Inst)      : %zu\n"
-           "sizeof(Expr)      : %zu\n"
-           "sizeof(Local)     : %zu\n"
-           "sizeof(AsmArg)    : %zu\n"
-           "sizeof(Asm)       : %zu\n"
-           "sizeof(Pointer)   : %zu\n"
-           "sizeof(Label)     : %zu\n"
-           "\n",
-           sizeof(Bool),
-           sizeof(InstValue),
-           sizeof(KeyValue),
-           sizeof(Inst),
-           sizeof(Expr),
-           sizeof(Local),
-           sizeof(AsmArg),
-           sizeof(Asm),
-           sizeof(Pointer),
-           sizeof(Label));
-
     insts_setup(INSTS, LEN_INSTS);
     insts_run(INSTS);
     insts_show();

@@ -1,5 +1,15 @@
 #include "asm.h"
 
+typedef struct {
+    const char* key;
+    InstValue   value;
+} KeyValue;
+
+typedef struct {
+    Inst* insts;
+    u32   len;
+} Block;
+
 #define CAP_STACK (1 << 3)
 static InstValue STACK[CAP_STACK];
 static u32       LEN_STACK = 0;

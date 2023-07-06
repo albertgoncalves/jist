@@ -3,6 +3,64 @@
 #include <string.h>
 #include <sys/mman.h>
 
+typedef enum {
+    ASM_REG_RDI = 0,
+    ASM_REG_R8,
+} AsmArgReg;
+
+typedef struct {
+    AsmArgReg reg;
+    i32       offset;
+} AsmArgAddr;
+
+typedef struct {
+    union {
+        const char* as_chars;
+        AsmArgReg   as_reg;
+        AsmArgAddr  as_addr;
+        i32         as_i32;
+    } value;
+    enum {
+        ASM_ARG_NONE = 0,
+        ASM_ARG_LABEL = 1 << 0,
+        ASM_ARG_REG = 1 << 1,
+        ASM_ARG_ADDR = 1 << 2,
+        ASM_ARG_I32 = 1 << 3,
+    } type;
+} AsmArg;
+
+typedef struct {
+    AsmArg args[2];
+    enum {
+        ASM_NOP = 0,
+
+        ASM_RET,
+
+        ASM_LABEL,
+
+        ASM_MOV,
+
+        ASM_JMP,
+        ASM_JNZ,
+        ASM_JGE,
+
+        ASM_TEST,
+        ASM_CMP,
+
+        ASM_AND,
+
+        ASM_ADD,
+    } type;
+} Asm;
+
+typedef struct {
+    const char* key;
+    union {
+        AsmArgReg as_reg;
+        u8*       as_bytes;
+    } value;
+} KeyValue;
+
 #define CAP_ASMS (1 << 5)
 static Asm ASMS[CAP_ASMS];
 static u32 LEN_ASMS = 0;
@@ -12,12 +70,16 @@ static u8  BYTES[CAP_BYTES];
 static u32 LEN_BYTES = 0;
 
 #define CAP_ASM_LABELS (1 << 4)
-static Label ASM_LABELS[CAP_ASM_LABELS];
-static u32   LEN_ASM_LABELS = 0;
+static KeyValue ASM_LABELS[CAP_ASM_LABELS];
+static u32      LEN_ASM_LABELS = 0;
 
 #define CAP_PATCHES (1 << 4)
-static Patch PATCHES[CAP_PATCHES];
-static u32   LEN_PATCHES = 0;
+static KeyValue PATCHES[CAP_PATCHES];
+static u32      LEN_PATCHES = 0;
+
+#define CAP_PTRS (1 << 3)
+static KeyValue PTRS[CAP_PTRS];
+static u32      LEN_PTRS = 0;
 
 static AsmArgReg REGS[] = {
     ASM_REG_RDI,
@@ -25,12 +87,7 @@ static AsmArgReg REGS[] = {
 };
 
 #define CAP_REGS (sizeof(REGS) / sizeof(REGS[0]))
-
 static u32 LEN_REGS = 0;
-
-#define CAP_PTRS (1 << 3)
-static Pointer PTRS[CAP_PTRS];
-static u32     LEN_PTRS = 0;
 
 static Asm* asm_alloc(void) {
     EXIT_IF(CAP_ASMS <= LEN_ASMS);
@@ -42,7 +99,7 @@ static AsmArgReg reg_alloc(void) {
     return REGS[LEN_REGS++];
 }
 
-static Pointer* ptr_alloc(void) {
+static KeyValue* ptr_alloc(void) {
     EXIT_IF(CAP_PTRS <= LEN_PTRS);
     return &PTRS[LEN_PTRS++];
 }
@@ -52,22 +109,22 @@ static void byte_push(u8 byte) {
     BYTES[LEN_BYTES++] = byte;
 }
 
-static void asm_label_push(const char* label) {
+static void asm_label_push(const char* key) {
     EXIT_IF(CAP_ASM_LABELS <= LEN_ASM_LABELS);
     for (u32 i = 0; i < LEN_ASM_LABELS; ++i) {
-        EXIT_IF(eq(ASM_LABELS[i].label, label));
+        EXIT_IF(eq(ASM_LABELS[i].key, key));
     }
-    ASM_LABELS[LEN_ASM_LABELS++] = (Label){
-        .label = label,
-        .bytes = &BYTES[LEN_BYTES],
+    ASM_LABELS[LEN_ASM_LABELS++] = (KeyValue){
+        .key = key,
+        .value = {.as_bytes = &BYTES[LEN_BYTES]},
     };
 }
 
-static void patch_push(const char* label) {
+static void patch_push(const char* key) {
     EXIT_IF(CAP_PATCHES <= LEN_PATCHES);
-    PATCHES[LEN_PATCHES++] = (Patch){
-        .label = label,
-        .bytes = &BYTES[LEN_BYTES],
+    PATCHES[LEN_PATCHES++] = (KeyValue){
+        .key = key,
+        .value = {.as_bytes = &BYTES[LEN_BYTES]},
     };
 }
 
@@ -202,9 +259,9 @@ static void expr_to_asm_arg(const Expr* expr, AsmArg* arg) {
     }
     case EXPR_LOAD: {
         for (u32 i = 0; i < LEN_PTRS; ++i) {
-            if (eq(expr->values[0].as_chars, PTRS[i].label)) {
+            if (eq(expr->values[0].as_chars, PTRS[i].key)) {
                 arg->value.as_addr = (AsmArgAddr){
-                    .reg = PTRS[i].reg,
+                    .reg = PTRS[i].value.as_reg,
                     .offset = 0,
                 };
                 arg->type = ASM_ARG_ADDR;
@@ -504,9 +561,9 @@ void asm_emit(void) {
     LEN_PATCHES = 0;
 
     for (u32 i = 0; i < LEN_ESCAPES; ++i) {
-        Pointer* pointer = ptr_alloc();
-        pointer->label = ESCAPES[i];
-        pointer->reg = reg_alloc();
+        KeyValue* pointer = ptr_alloc();
+        pointer->key = ESCAPES[i];
+        pointer->value.as_reg = reg_alloc();
     }
 
     const u32 len_regs = LEN_REGS;
@@ -521,16 +578,19 @@ void asm_emit(void) {
 
     for (u32 i = 0; i < LEN_PATCHES; ++i) {
         for (u32 j = 0; j < LEN_ASM_LABELS; ++j) {
-            if (!eq(PATCHES[i].label, ASM_LABELS[j].label)) {
+            if (!eq(PATCHES[i].key, ASM_LABELS[j].key)) {
                 continue;
             }
 
-            const i64 offset = ASM_LABELS[j].bytes - PATCHES[i].bytes;
+            const i64 offset =
+                ASM_LABELS[j].value.as_bytes - PATCHES[i].value.as_bytes;
             EXIT_IF(2147483647 < offset);
             EXIT_IF(offset < -2147483648);
 
             const i32 truncated = (i32)offset;
-            memcpy(PATCHES[i].bytes - sizeof(i32), &truncated, sizeof(i32));
+            memcpy(PATCHES[i].value.as_bytes - sizeof(i32),
+                   &truncated,
+                   sizeof(i32));
         }
     }
 }

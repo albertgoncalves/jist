@@ -27,16 +27,14 @@ typedef enum {
 
 typedef struct Expr Expr;
 
-typedef union {
-    const char* as_chars;
-    Expr*       as_expr;
-    i64         as_i64;
-    i32         as_i32;
-} ExprValue;
-
 struct Expr {
-    ExprValue values[2];
-    ExprType  type;
+    union {
+        const char* as_chars;
+        Expr*       as_expr;
+        i64         as_i64;
+        i32         as_i32;
+    } values[2];
+    ExprType type;
 };
 
 void exprs_parse(const Inst*, u32, u32);
