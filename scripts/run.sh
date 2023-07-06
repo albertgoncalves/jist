@@ -20,5 +20,17 @@ flags=(
 )
 
 clang-format -i -verbose "$WD/src/"*
-clang "${flags[@]}" -o "$WD/bin/main" "$WD/src/main.c"
+
+clang "${flags[@]}" -c -o "$WD/bin/prelude.o" "$WD/src/prelude.c" &
+clang "${flags[@]}" -c -o "$WD/bin/inst.o"    "$WD/src/inst.c"    &
+clang "${flags[@]}" -c -o "$WD/bin/expr.o"    "$WD/src/expr.c"    &
+clang "${flags[@]}" -c -o "$WD/bin/asm.o"     "$WD/src/asm.c"     &
+
+for _ in $(jobs -p); do
+    wait -n
+done
+
+clang "${flags[@]}" -o "$WD/bin/main" "$WD/bin/prelude.o" "$WD/bin/inst.o" \
+    "$WD/bin/expr.o" "$WD/bin/asm.o" "$WD/src/main.c"
+
 "$WD/bin/main"

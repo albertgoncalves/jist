@@ -3,6 +3,21 @@
 // NOTE: See `https://www.cs.cmu.edu/~rjsimmon/15411-f15/lec/10-ssa.pdf`.
 // NOTE: See `http://troubles.md/wasm-is-not-a-stack-machine/`.
 
+u32 JUMPS[CAP_INSTS] = {0};
+u32 LOOPS[CAP_INSTS] = {0};
+
+const char* ESCAPES[CAP_ESCAPES];
+u32         LEN_ESCAPES = 0;
+
+const Expr* LIST[CAP_LIST];
+u32         LEN_LIST = 0;
+
+#define INST_EMPTY(inst_type) ((Inst){.type = inst_type})
+#define INST_I64(inst_type, inst_arg) \
+    ((Inst){.type = inst_type, .value = {.as_i64 = inst_arg}})
+#define INST_CHARS(inst_type, inst_arg) \
+    ((Inst){.type = inst_type, .value = {.as_chars = inst_arg}})
+
 static Inst INSTS[] = {
     INST_I64(INST_PUSH, 0),
     INST_CHARS(INST_ALLOC, "x"),
@@ -44,8 +59,6 @@ static Inst INSTS[] = {
 };
 
 #define LEN_INSTS (sizeof(INSTS) / sizeof(INSTS[0]))
-
-STATIC_ASSERT(LEN_INSTS <= CAP_INSTS);
 
 i32 main(void) {
     printf("\n"
