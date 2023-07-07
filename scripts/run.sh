@@ -8,6 +8,7 @@ fi
 
 flags=(
     "-ferror-limit=1"
+    -flto
     "-fsanitize=address"
     "-fsanitize=bounds"
     "-fsanitize=float-divide-by-zero"
