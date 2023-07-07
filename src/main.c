@@ -82,10 +82,10 @@ i32 main(void) {
         asm_emit();
         asm_show();
 
-        void* func = asm_jit();
+        void (*func)(i64*) = (void (*)(i64*))asm_jit();
 
         i64 x = 0;
-        ((void (*)(i64*))func)(&x);
+        func(&x);
         printf("%ld\n", x);
     }
 
