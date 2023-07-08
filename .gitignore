@@ -1,12 +1,10 @@
 *
 !.gitignore
 !*.nix
-!.shellhook
 !README.md
 !.clang-format
 
-!scripts/
-!*.sh
+!Makefile
 
 !src/
 !*.c
