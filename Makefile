@@ -21,11 +21,12 @@ CFLAGS = \
     -Wno-declaration-after-statement \
     -Wno-disabled-macro-expansion \
     -Wno-padded
-OBJECTS = \
-	build/prelude.o \
-	build/inst.o \
-	build/expr.o \
-	build/asm.o
+MODULES = \
+	prelude \
+	inst \
+	expr \
+	asm
+OBJECTS = $(foreach x,$(MODULES),build/$(x).o)
 
 .PHONY: all
 all: bin/main
