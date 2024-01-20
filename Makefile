@@ -1,9 +1,8 @@
 MAKEFLAGS += --silent
-CC = clang
+CC = mold -run clang
 CFLAGS = \
     -D_DEFAULT_SOURCE \
     -ferror-limit=1 \
-    -flto \
     -fsanitize=address \
     -fsanitize=bounds \
     -fsanitize=float-divide-by-zero \
@@ -20,7 +19,8 @@ CFLAGS = \
     -Wno-covered-switch-default \
     -Wno-declaration-after-statement \
     -Wno-disabled-macro-expansion \
-    -Wno-padded
+    -Wno-padded \
+    -Wno-unsafe-buffer-usage
 MODULES = \
 	prelude \
 	inst \
