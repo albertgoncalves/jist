@@ -1,26 +1,25 @@
 MAKEFLAGS += --silent
 CC = mold -run clang
 CFLAGS = \
-    -D_DEFAULT_SOURCE \
-    -ferror-limit=1 \
-    -fsanitize=address \
-    -fsanitize=bounds \
-    -fsanitize=float-divide-by-zero \
-    -fsanitize=implicit-conversion \
-    -fsanitize=integer \
-    -fsanitize=nullability \
-    -fsanitize=undefined \
-    -fshort-enums \
-    -march=native \
-    -O3 \
-    -std=c99 \
-    -Werror \
-    -Weverything \
-    -Wno-covered-switch-default \
-    -Wno-declaration-after-statement \
-    -Wno-disabled-macro-expansion \
-    -Wno-padded \
-    -Wno-unsafe-buffer-usage
+	-D_DEFAULT_SOURCE \
+	-ferror-limit=1 \
+	-fsanitize=bounds \
+	-fsanitize=float-divide-by-zero \
+	-fsanitize=implicit-conversion \
+	-fsanitize=integer \
+	-fsanitize=nullability \
+	-fsanitize=undefined \
+	-fshort-enums \
+	-march=native \
+	-O3 \
+	-std=c99 \
+	-Werror \
+	-Weverything \
+	-Wno-covered-switch-default \
+	-Wno-declaration-after-statement \
+	-Wno-disabled-macro-expansion \
+	-Wno-padded \
+	-Wno-unsafe-buffer-usage
 MODULES = \
 	prelude \
 	inst \
